@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Metallic Music Player</title>
+<style>
+body {
+    margin: 0;
+    height: 100vh;
+    background: radial-gradient(circle at top, #111, #000);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: system-ui, sans-serif;
+    overflow: hidden;
+}
+
+/* ===== PLAYER ===== */
+.player {
+    position: relative;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle at top left, #2b2b2b, #0a0a0a);
+    box-shadow:
+        inset 0 0 30px rgba(255,255,255,0.05),
+        0 20px 40px rgba(0,0,0,0.8);
+}
+
+/* ===== ROTATING RING ===== */
+.ring {
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    background: conic-gradient(
+        #00f5ff,
+        #ff00cc,
+        #00ff88,
+        #00f5ff
+    );
+    animation: spin 6s linear infinite;
+    filter: blur(1px);
+}
+.ring::after {
+    content: "";
+    position: absolute;
+    inset: 6px;
+    background: #000;
+    border-radius: 50%;
+}
+
+@keyframes spin {
+    100% { transform: rotate(360deg); }
+}
+
+/* ===== CENTER BUTTON ===== */
+.center {
+    position: absolute;
+    inset: 35%;
+    border-radius: 50%;
+    background: radial-gradient(circle at top, #555, #111);
+    box-shadow:
+        inset 0 0 10px rgba(255,255,255,0.3),
+        0 8px 15px rgba(0,0,0,0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+.center:active {
+    transform: scale(0.95);
+}
+.center span {
+    font-size: 32px;
+    color: #00f5ff;
+}
+
+/* ===== VISUALIZER ===== */
+.visualizer {
+    position: absolute;
+    bottom: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 4px;
+}
+.bar {
+    width: 6px;
+    height: 20px;
+    background: linear-gradient(#00f5ff, #ff00cc);
+    border-radius: 3px;
+}
+
+/* ===== UPLOAD ===== */
+input[type="file"] {
+    position: absolute;
+    bottom: -80px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #aaa;
+}
+</style>
+</head>
+<body>
+
+<div class="player">
+    <div class="ring"></div>
+
+    <div class="center" id="playBtn">
+        <span id="icon">▶</span>
+    </div>
+
+    <div class="visualizer" id="viz"></div>
+
+    <input type="file" accept="audio/mp3" id="fileInput">
+</div>
+
+<script>
+const audio = new Audio();
+const fileInput = document.getElementById("fileInput");
+const playBtn = document.getElementById("playBtn");
+const icon = document.getElementById("icon");
+const viz = document.getElementById("viz");
+
+/* ===== CREATE BARS ===== */
+const bars = [];
+for (let i = 0; i < 20; i++) {
+    const b = document.createElement("div");
+    b.className = "bar";
+    viz.appendChild(b);
+    bars.push(b);
+}
+
+/* ===== AUDIO CONTEXT ===== */
+let ctx, analyser, source;
+fileInput.onchange = e => {
+    audio.src = URL.createObjectURL(e.target.files[0]);
+    if (!ctx) {
+        ctx = new AudioContext();
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 64;
+        source = ctx.createMediaElementSource(audio);
+        source.connect(analyser);
+        analyser.connect(ctx.destination);
+        animate();
+    }
+};
+
+/* ===== PLAY / PAUSE ===== */
+playBtn.onclick = () => {
+    if (!audio.src) return;
+    if (audio.paused) {
+        audio.play();
+        ctx.resume();
+        icon.textContent = "❚❚";
+    } else {
+        audio.pause();
+        icon.textContent = "▶";
+    }
+};
+
+/* ===== VISUALIZER ===== */
+function animate() {
+    requestAnimationFrame(animate);
+    if (!analyser) return;
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+
+    bars.forEach((bar, i) => {
+        const val = data[i] / 3;
+        bar.style.height = val + "px";
+        bar.style.background =
+            `linear-gradient(180deg,
+            hsl(${val * 2},100%,60%),
+            hsl(${val * 3},100%,40%))`;
+    });
+}
+</script>
+
+</body>
+</html>
