@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Black Steel RGB Music Player</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root{
+  --size: 330px;
+}
+
+body{
+  margin:0;
+  height:100vh;
+  background:#000;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  font-family:system-ui;
+  color:#fff;
+}
+
+/* ===== RGB EDGE RING (SUBTLE) ===== */
+.rgb-ring{
+  width:var(--size);
+  height:var(--size);
+  border-radius:50%;
+  background:conic-gradient(
+    #ff004c,
+    #ffae00,
+    #7CFF00,
+    #00ffd5,
+    #005dff,
+    #b100ff,
+    #ff004c
+  );
+  animation:spin 10s linear infinite;
+  padding:5px;
+}
+
+@keyframes spin{
+  to{transform:rotate(360deg)}
+}
+
+/* ===== BLACK STEEL BODY ===== */
+.steel{
+  width:100%;
+  height:100%;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at top, #444, #050505 65%);
+  box-shadow:
+    inset 0 0 35px #000,
+    inset 0 8px 12px #ffffff10,
+    0 25px 50px #000;
+  position:relative;
+  overflow:hidden;
+}
+
+/* ===== INNER DEPTH ===== */
+.steel::before{
+  content:"";
+  position:absolute;
+  inset:22px;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at center, #111, #000 70%);
+  box-shadow: inset 0 0 25px #000;
+}
+
+/* ===== WAVEFORM ===== */
+canvas#wave{
+  position:absolute;
+  inset:35px;
+  border-radius:50%;
+}
+
+/* ===== PROGRESS RING ===== */
+canvas#progress{
+  position:absolute;
+  inset:10px;
+  pointer-events:none;
+}
+
+/* ===== 3D METAL BUTTON ===== */
+.play{
+  position:absolute;
+  inset:41%;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at top, #cfcfcf, #2b2b2b);
+  box-shadow:
+    inset 0 2px 4px #ffffff70,
+    inset 0 -6px 10px #000,
+    0 10px 20px #000;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  font-size:30px;
+  color:#00f6ff;
+  cursor:pointer;
+  user-select:none;
+}
+
+.play:active{
+  transform:translateY(3px);
+  box-shadow:
+    inset 0 2px 4px #000,
+    inset 0 -2px 4px #ffffff40,
+    0 4px 10px #000;
+}
+
+/* ===== INFO ===== */
+.info{
+  position:absolute;
+  bottom:-85px;
+  width:100%;
+  text-align:center;
+  font-size:14px;
+  opacity:.85;
+  padding:0 15px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+/* ===== SELECT BUTTON ===== */
+.pick{
+  position:absolute;
+  bottom:-130px;
+  left:50%;
+  transform:translateX(-50%);
+  background:#000;
+  color:#00f6ff;
+  border:1px solid #00f6ff;
+  padding:8px 22px;
+  border-radius:25px;
+  font-size:14px;
+  box-shadow:0 0 15px #00f6ff70;
+}
+
+input{display:none}
+</style>
+</head>
+
+<body>
+
+<div class="rgb-ring">
+  <div class="steel" id="dial">
+
+    <canvas id="wave" width="260" height="260"></canvas>
+    <canvas id="progress" width="310" height="310"></canvas>
+
+    <div class="play" id="btn">▶</div>
+
+    <div class="info" id="info">No track loaded</div>
+
+    <button class="pick" id="pick">Select MP3</button>
+    <input type="file" id="file" accept="audio/*">
+
+  </div>
+</div>
+
+<script>
+const audio = new Audio();
+const file = document.getElementById("file");
+const pick = document.getElementById("pick");
+const btn = document.getElementById("btn");
+const info = document.getElementById("info");
+
+const wave = document.getElementById("wave");
+const wctx = wave.getContext("2d");
+
+const prog = document.getElementById("progress");
+const pctx = prog.getContext("2d");
+
+let ctx, analyser, source;
+
+/* OPEN FILE PICKER */
+pick.onclick = ()=>file.click();
+
+/* LOAD AUDIO */
+file.onchange = e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  audio.src = URL.createObjectURL(f);
+  info.textContent = f.name;
+};
+
+/* PLAY / PAUSE */
+btn.onclick = ()=>{
+  if(!audio.src) return;
+
+  if(!ctx){
+    ctx = new (window.AudioContext||webkitAudioContext)();
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    source = ctx.createMediaElementSource(audio);
+    source.connect(analyser);
+    analyser.connect(ctx.destination);
+    render();
+  }
+
+  if(audio.paused){
+    audio.play();
+    ctx.resume();
+    btn.textContent="❚❚";
+  }else{
+    audio.pause();
+    btn.textContent="▶";
+  }
+};
+
+/* RENDER LOOP */
+function render(){
+  requestAnimationFrame(render);
+
+  if(!analyser) return;
+
+  /* WAVEFORM */
+  const data = new Uint8Array(analyser.fftSize);
+  analyser.getByteTimeDomainData(data);
+
+  wctx.clearRect(0,0,wave.width,wave.height);
+  wctx.beginPath();
+  wctx.lineWidth=2;
+  wctx.strokeStyle=`hsl(${Date.now()/40%360},80%,60%)`;
+
+  for(let i=0;i<data.length;i++){
+    const v=data[i]/128;
+    const x=i/data.length*wave.width;
+    const y=v*wave.height/2;
+    i===0?wctx.moveTo(x,y):wctx.lineTo(x,y);
+  }
+  wctx.stroke();
+
+  /* PROGRESS */
+  pctx.clearRect(0,0,prog.width,prog.height);
+  if(audio.duration){
+    const angle = audio.currentTime/audio.duration * Math.PI*2;
+    pctx.beginPath();
+    pctx.strokeStyle="#00f6ff";
+    pctx.lineWidth=3;
+    pctx.arc(
+      prog.width/2,
+      prog.height/2,
+      145,
+      -Math.PI/2,
+      angle - Math.PI/2
+    );
+    pctx.stroke();
+  }
+}
+</script>
+
+</body>
+  </html>
