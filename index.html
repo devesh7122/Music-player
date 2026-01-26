@@ -52,23 +52,74 @@ body{
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* CENTER BUTTON */
+/* MODERN RGB CENTER BUTTON */
 .center{
     position:absolute;
-    inset:38%;
+    inset:40%;
     border-radius:50%;
-    background:radial-gradient(circle at top,#777,#111);
-    box-shadow:
-        inset 0 0 10px #fff5,
-        0 10px 20px #000;
+    background:
+        radial-gradient(circle at top, #222, #000);
     display:flex;
     justify-content:center;
     align-items:center;
-    font-size:32px;
-    color:#0ff;
     cursor:pointer;
-    user-select:none;
+    z-index:5;
 }
-.center:active{transform:scale(.9)}
+
+/* RGB RING */
+.center::before{
+    content:"";
+    position:absolute;
+    inset:-6px;
+    border-radius:50%;
+    background:conic-gradient(
+        red, magenta, blue, cyan, lime, yellow, red
+    );
+    filter:none;
+    animation:spin 4s linear infinite;
+}
+
+/* INNER CUT */
+.center::after{
+    content:"";
+    position:absolute;
+    inset:3px;
+    border-radius:50%;
+    background:radial-gradient(circle at top,#333,#000);
+    box-shadow:
+        inset 0 0 12px #fff3,
+        0 0 20px #0ff6;
+}
+
+/* ICON CONTAINER */
+.icon{
+    position:relative;
+    z-index:2;
+}
+
+/* PLAY ICON */
+.play-icon{
+    width:0;
+    height:0;
+    border-left:18px solid #0ff;
+    border-top:11px solid transparent;
+    border-bottom:11px solid transparent;
+    filter:drop-shadow(0 0 6px #0ff);
+}
+
+/* PAUSE ICON */
+.pause-icon{
+    display:flex;
+    gap:6px;
+}
+.pause-icon span{
+    width:5px;
+    height:22px;
+    background:#0ff;
+    box-shadow:0 0 6px #0ff;
+    border-radius:2px;
+}
+
 
 /* BEAT PULSE */
 .pulse{animation:pulse .3s ease}
@@ -124,7 +175,10 @@ input{display:none}
 
     <canvas id="wave" width="280" height="280"></canvas>
 
-    <div class="center" id="btn">▶</div>
+    <div class="center" id="btn">
+    <div class="icon play-icon" id="icon"></div>
+</div>
+
 
     <div class="info" id="info">No track loaded</div>
 
@@ -141,6 +195,7 @@ const info = document.getElementById("info");
 const canvas = document.getElementById("wave");
 const ctx2d = canvas.getContext("2d");
 const player = document.getElementById("player");
+const icon = document.getElementById("icon");    
 
 let ctx, analyser, source;
 
@@ -172,10 +227,12 @@ btn.onclick = ()=>{
     if(audio.paused){
         audio.play();
         ctx.resume();
-        btn.textContent="❚❚";
+        icon.className = "icon pause-icon";
+        icon.innerHTML = "<span></span><span></span>";
     }else{
         audio.pause();
-        btn.textContent="▶";
+        icon.className = "icon play-icon";
+        icon.innerHTML = "";
     }
 };
 
