@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Neon Beat Music Player</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 body{
@@ -29,24 +29,30 @@ body{
     transition:.15s;
 }
 
-/* NEON RGB RING */
+/* HD RGB RING (NO BLUR) */
 .ring{
     position:absolute;
-    inset:-12px;
+    inset:-14px;
     border-radius:50%;
     background:conic-gradient(
         red,magenta,blue,cyan,lime,yellow,red
     );
     animation:spin 6s linear infinite;
-    filter:blur(2px);
+    filter:none; /* FIX: removed blur */
 }
 .ring::after{
     content:"";
     position:absolute;
-    inset:12px;
+    inset:14px;
     background:#000;
     border-radius:50%;
 }
+
+/* dynamic thickness */
+.ring.dynamic::after{
+    inset: var(--ringInset, 14px);
+}
+
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* CENTER BUTTON */
@@ -55,32 +61,25 @@ body{
     inset:38%;
     border-radius:50%;
     background:radial-gradient(circle at top,#777,#111);
-    box-shadow:
-        inset 0 0 10px #fff5,
-        0 10px 20px #000;
+    box-shadow: inset 0 0 10px #fff5, 0 10px 20px #000;
     display:flex;
     justify-content:center;
     align-items:center;
     font-size:32px;
     color:#0ff;
     cursor:pointer;
-    user-select:none;
+    z-index:3;
 }
 .center:active{transform:scale(.9)}
 
-/* BEAT PULSE */
-.pulse{animation:pulse .3s ease}
-@keyframes pulse{50%{transform:scale(1.08)}}
-
-/* CANVAS WAVE (FIXED) */
+/* CANVAS */
 canvas{
     position:absolute;
-    inset:20px;
+    inset:18px;
     border-radius:50%;
-    overflow:hidden;
 }
 
-/* INFO */
+/* INFO + PICK */
 .info{
     position:absolute;
     bottom:-90px;
@@ -88,13 +87,10 @@ canvas{
     text-align:center;
     font-size:14px;
     opacity:.8;
-    padding:0 10px;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
 }
-
-/* PICK BUTTON */
 .pick{
     position:absolute;
     bottom:-135px;
@@ -107,10 +103,7 @@ canvas{
     border-radius:25px;
     font-size:14px;
     box-shadow:0 0 15px #0ff7;
-    cursor:pointer;
 }
-.pick:active{transform:translateX(-50%) scale(.95)}
-
 input{display:none}
 </style>
 </head>
@@ -118,14 +111,10 @@ input{display:none}
 <body>
 
 <div class="player" id="player">
-    <div class="ring"></div>
-
-    <canvas id="wave" width="280" height="280"></canvas>
-
+    <div class="ring" id="ring"></div>
+    <canvas id="wave"></canvas>
     <div class="center" id="btn">▶</div>
-
     <div class="info" id="info">No track loaded</div>
-
     <button class="pick" id="pick">Select MP3</button>
     <input type="file" id="file" accept="audio/*">
 </div>
@@ -138,14 +127,13 @@ const btn = document.getElementById("btn");
 const info = document.getElementById("info");
 const canvas = document.getElementById("wave");
 const ctx2d = canvas.getContext("2d");
-const player = document.getElementById("player");
+const ring = document.getElementById("ring");
 
 let ctx, analyser, source;
+canvas.width = canvas.height = 280;
 
-/* OPEN FILE PICKER */
-pick.onclick = () => file.click();
-
-/* LOAD AUDIO */
+/* FILE PICK */
+pick.onclick = ()=>file.click();
 file.onchange = e=>{
     const f = e.target.files[0];
     if(!f) return;
@@ -153,74 +141,71 @@ file.onchange = e=>{
     info.textContent = f.name;
 };
 
-/* PLAY / PAUSE */
+/* PLAY */
 btn.onclick = ()=>{
     if(!audio.src) return;
-
     if(!ctx){
         ctx = new (window.AudioContext||webkitAudioContext)();
         analyser = ctx.createAnalyser();
-        analyser.fftSize = 2048;
+        analyser.fftSize = 256;
         source = ctx.createMediaElementSource(audio);
         source.connect(analyser);
         analyser.connect(ctx.destination);
         draw();
     }
-
-    if(audio.paused){
-        audio.play();
-        ctx.resume();
-        btn.textContent="❚❚";
-    }else{
-        audio.pause();
-        btn.textContent="▶";
-    }
+    audio.paused ? (audio.play(),ctx.resume(),btn.textContent="❚❚") :
+                   (audio.pause(),btn.textContent="▶");
 };
 
-/* WAVEFORM + BEAT SYNC (FIXED HEIGHT + CLIP) */
+/* VISUALIZER */
 function draw(){
     requestAnimationFrame(draw);
     if(!analyser) return;
 
-    const data = new Uint8Array(analyser.fftSize);
-    analyser.getByteTimeDomainData(data);
+    const freq = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(freq);
 
-    ctx2d.clearRect(0,0,canvas.width,canvas.height);
+    /* glow trail */
+    ctx2d.fillStyle = "rgba(0,0,0,0.15)";
+    ctx2d.fillRect(0,0,canvas.width,canvas.height);
 
-    /* perfect circular clipping */
     ctx2d.save();
-    ctx2d.beginPath();
-    ctx2d.arc(
-        canvas.width/2,
-        canvas.height/2,
-        canvas.width/2 - 4,
-        0,
-        Math.PI * 2
-    );
-    ctx2d.clip();
+    ctx2d.translate(canvas.width/2,canvas.height/2);
 
-    ctx2d.beginPath();
-    ctx2d.lineWidth = 2;
-    ctx2d.strokeStyle = `hsl(${Date.now()/25%360},100%,60%)`;
+    const bars = 64;
+    let bass = 0;
 
-    let sum = 0;
-    for(let i=0;i<data.length;i++){
-        const v = data[i]/128;
-        const x = i/data.length * canvas.width;
+    for(let i=0;i<bars;i++){
+        const val = freq[i];
+        bass += val;
 
-        /* reduced & centered height */
-        const y = v*(canvas.height*0.35) + canvas.height*0.15;
+        const angle = (i/bars)*Math.PI*2;
+        const h = val*0.35;
+        ctx2d.rotate(angle);
 
-        i===0 ? ctx2d.moveTo(x,y) : ctx2d.lineTo(x,y);
-        sum += Math.abs(v-1);
+        ctx2d.beginPath();
+        ctx2d.strokeStyle = `hsl(${i*6 + Date.now()/30},100%,60%)`;
+        ctx2d.lineWidth = 3;
+        ctx2d.shadowBlur = 15;
+        ctx2d.shadowColor = ctx2d.strokeStyle;
+
+        ctx2d.moveTo(0, -90);
+        ctx2d.lineTo(0, -90-h);
+        ctx2d.stroke();
+        ctx2d.rotate(-angle);
     }
 
-    ctx2d.stroke();
     ctx2d.restore();
 
-    if(sum > 180){
-        player.classList.add("pulse");
-        setTimeout(()=>player.classList.remove("pulse"),80);
+    /* bass reactive ring */
+    bass /= bars;
+    const inset = 14 - bass/60;
+    ring.style.setProperty("--ringInset", inset+"px");
+    ring.classList.add("dynamic");
+
+    /* mobile vibration */
+    if(bass > 160 && navigator.vibrate){
+        navigator.vibrate(10);
     }
 }
 </script>
