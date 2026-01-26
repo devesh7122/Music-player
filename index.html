@@ -26,10 +26,9 @@ body{
     border-radius:50%;
     background:radial-gradient(circle at top,#333,#000);
     box-shadow:0 30px 60px #000,inset 0 0 30px #fff2;
-    transition:.15s;
 }
 
-/* HD RGB RING (NO BLUR) */
+/* SHARP RGB RING (HD FIX) */
 .ring{
     position:absolute;
     inset:-14px;
@@ -38,7 +37,6 @@ body{
         red,magenta,blue,cyan,lime,yellow,red
     );
     animation:spin 6s linear infinite;
-    filter:none; /* FIX: removed blur */
 }
 .ring::after{
     content:"";
@@ -48,12 +46,9 @@ body{
     border-radius:50%;
 }
 
-/* dynamic thickness */
-.ring.dynamic::after{
-    inset: var(--ringInset, 14px);
+@keyframes spin{
+    to{transform:rotate(360deg)}
 }
-
-@keyframes spin{to{transform:rotate(360deg)}}
 
 /* CENTER BUTTON */
 .center{
@@ -61,25 +56,28 @@ body{
     inset:38%;
     border-radius:50%;
     background:radial-gradient(circle at top,#777,#111);
-    box-shadow: inset 0 0 10px #fff5, 0 10px 20px #000;
+    box-shadow:
+        inset 0 0 10px #fff5,
+        0 10px 20px #000;
     display:flex;
     justify-content:center;
     align-items:center;
     font-size:32px;
     color:#0ff;
     cursor:pointer;
-    z-index:3;
+    user-select:none;
+    z-index:2;
 }
 .center:active{transform:scale(.9)}
 
 /* CANVAS */
 canvas{
     position:absolute;
-    inset:18px;
+    inset:20px;
     border-radius:50%;
 }
 
-/* INFO + PICK */
+/* INFO */
 .info{
     position:absolute;
     bottom:-90px;
@@ -87,10 +85,13 @@ canvas{
     text-align:center;
     font-size:14px;
     opacity:.8;
+    padding:0 10px;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
 }
+
+/* PICK BUTTON */
 .pick{
     position:absolute;
     bottom:-135px;
@@ -103,7 +104,12 @@ canvas{
     border-radius:25px;
     font-size:14px;
     box-shadow:0 0 15px #0ff7;
+    cursor:pointer;
 }
+.pick:active{
+    transform:translateX(-50%) scale(.95);
+}
+
 input{display:none}
 </style>
 </head>
@@ -111,10 +117,14 @@ input{display:none}
 <body>
 
 <div class="player" id="player">
-    <div class="ring" id="ring"></div>
-    <canvas id="wave"></canvas>
+    <div class="ring"></div>
+
+    <canvas id="wave" width="280" height="280"></canvas>
+
     <div class="center" id="btn">▶</div>
+
     <div class="info" id="info">No track loaded</div>
+
     <button class="pick" id="pick">Select MP3</button>
     <input type="file" id="file" accept="audio/*">
 </div>
@@ -127,12 +137,10 @@ const btn = document.getElementById("btn");
 const info = document.getElementById("info");
 const canvas = document.getElementById("wave");
 const ctx2d = canvas.getContext("2d");
-const ring = document.getElementById("ring");
 
 let ctx, analyser, source;
-canvas.width = canvas.height = 280;
 
-/* FILE PICK */
+/* PICK FILE */
 pick.onclick = ()=>file.click();
 file.onchange = e=>{
     const f = e.target.files[0];
@@ -141,72 +149,69 @@ file.onchange = e=>{
     info.textContent = f.name;
 };
 
-/* PLAY */
+/* PLAY / PAUSE */
 btn.onclick = ()=>{
     if(!audio.src) return;
+
     if(!ctx){
         ctx = new (window.AudioContext||webkitAudioContext)();
         analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
+        analyser.fftSize = 2048;
         source = ctx.createMediaElementSource(audio);
         source.connect(analyser);
         analyser.connect(ctx.destination);
         draw();
     }
-    audio.paused ? (audio.play(),ctx.resume(),btn.textContent="❚❚") :
-                   (audio.pause(),btn.textContent="▶");
+
+    if(audio.paused){
+        audio.play();
+        ctx.resume();
+        btn.textContent="❚❚";
+    }else{
+        audio.pause();
+        btn.textContent="▶";
+    }
 };
 
-/* VISUALIZER */
+/* OLD WAVEFORM + GLOW TRAILS */
 function draw(){
     requestAnimationFrame(draw);
     if(!analyser) return;
 
-    const freq = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(freq);
+    const data = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(data);
 
-    /* glow trail */
-    ctx2d.fillStyle = "rgba(0,0,0,0.15)";
+    /* glow trail fade */
+    ctx2d.fillStyle = "rgba(0,0,0,0.18)";
     ctx2d.fillRect(0,0,canvas.width,canvas.height);
 
+    /* circular clip */
     ctx2d.save();
-    ctx2d.translate(canvas.width/2,canvas.height/2);
+    ctx2d.beginPath();
+    ctx2d.arc(
+        canvas.width/2,
+        canvas.height/2,
+        canvas.width/2 - 4,
+        0,
+        Math.PI * 2
+    );
+    ctx2d.clip();
 
-    const bars = 64;
-    let bass = 0;
+    ctx2d.beginPath();
+    ctx2d.lineWidth = 2;
+    ctx2d.strokeStyle = `hsl(${Date.now()/30 % 360},100%,60%)`;
+    ctx2d.shadowBlur = 15;
+    ctx2d.shadowColor = ctx2d.strokeStyle;
 
-    for(let i=0;i<bars;i++){
-        const val = freq[i];
-        bass += val;
-
-        const angle = (i/bars)*Math.PI*2;
-        const h = val*0.35;
-        ctx2d.rotate(angle);
-
-        ctx2d.beginPath();
-        ctx2d.strokeStyle = `hsl(${i*6 + Date.now()/30},100%,60%)`;
-        ctx2d.lineWidth = 3;
-        ctx2d.shadowBlur = 15;
-        ctx2d.shadowColor = ctx2d.strokeStyle;
-
-        ctx2d.moveTo(0, -90);
-        ctx2d.lineTo(0, -90-h);
-        ctx2d.stroke();
-        ctx2d.rotate(-angle);
+    for(let i=0;i<data.length;i++){
+        const v = data[i] / 128;
+        const x = i / data.length * canvas.width;
+        const y = v * (canvas.height * 0.35) + canvas.height * 0.15;
+        i === 0 ? ctx2d.moveTo(x,y) : ctx2d.lineTo(x,y);
     }
 
+    ctx2d.stroke();
     ctx2d.restore();
-
-    /* bass reactive ring */
-    bass /= bars;
-    const inset = 14 - bass/60;
-    ring.style.setProperty("--ringInset", inset+"px");
-    ring.classList.add("dynamic");
-
-    /* mobile vibration */
-    if(bass > 160 && navigator.vibrate){
-        navigator.vibrate(10);
-    }
 }
 </script>
 
