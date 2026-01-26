@@ -72,10 +72,12 @@ body{
 .pulse{animation:pulse .3s ease}
 @keyframes pulse{50%{transform:scale(1.08)}}
 
-/* CANVAS WAVE */
+/* CANVAS WAVE (FIXED) */
 canvas{
     position:absolute;
     inset:20px;
+    border-radius:50%;
+    overflow:hidden;
 }
 
 /* INFO */
@@ -140,7 +142,7 @@ const player = document.getElementById("player");
 
 let ctx, analyser, source;
 
-/* OPEN FILE PICKER (ANDROID SAFE) */
+/* OPEN FILE PICKER */
 pick.onclick = () => file.click();
 
 /* LOAD AUDIO */
@@ -151,7 +153,7 @@ file.onchange = e=>{
     info.textContent = f.name;
 };
 
-/* PLAY / PAUSE (USER GESTURE SAFE) */
+/* PLAY / PAUSE */
 btn.onclick = ()=>{
     if(!audio.src) return;
 
@@ -175,30 +177,48 @@ btn.onclick = ()=>{
     }
 };
 
-/* WAVEFORM + BEAT SYNC */
+/* WAVEFORM + BEAT SYNC (FIXED HEIGHT + CLIP) */
 function draw(){
     requestAnimationFrame(draw);
-
     if(!analyser) return;
+
     const data = new Uint8Array(analyser.fftSize);
     analyser.getByteTimeDomainData(data);
 
     ctx2d.clearRect(0,0,canvas.width,canvas.height);
-    ctx2d.beginPath();
-    ctx2d.lineWidth=2;
-    ctx2d.strokeStyle=`hsl(${Date.now()/25%360},100%,60%)`;
 
-    let sum=0;
+    /* perfect circular clipping */
+    ctx2d.save();
+    ctx2d.beginPath();
+    ctx2d.arc(
+        canvas.width/2,
+        canvas.height/2,
+        canvas.width/2 - 4,
+        0,
+        Math.PI * 2
+    );
+    ctx2d.clip();
+
+    ctx2d.beginPath();
+    ctx2d.lineWidth = 2;
+    ctx2d.strokeStyle = `hsl(${Date.now()/25%360},100%,60%)`;
+
+    let sum = 0;
     for(let i=0;i<data.length;i++){
         const v = data[i]/128;
-        const x = i/data.length*canvas.width;
-        const y = v*canvas.height/2;
-        i===0?ctx2d.moveTo(x,y):ctx2d.lineTo(x,y);
-        sum+=Math.abs(v-1);
-    }
-    ctx2d.stroke();
+        const x = i/data.length * canvas.width;
 
-    if(sum>180){
+        /* reduced & centered height */
+        const y = v*(canvas.height*0.35) + canvas.height*0.15;
+
+        i===0 ? ctx2d.moveTo(x,y) : ctx2d.lineTo(x,y);
+        sum += Math.abs(v-1);
+    }
+
+    ctx2d.stroke();
+    ctx2d.restore();
+
+    if(sum > 180){
         player.classList.add("pulse");
         setTimeout(()=>player.classList.remove("pulse"),80);
     }
