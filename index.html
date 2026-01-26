@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Neon Beat Music Player</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 
 <style>
 body{
@@ -24,69 +24,62 @@ body{
     width:320px;
     height:320px;
     border-radius:50%;
-    background:radial-gradient(circle at top,#222,#000);
+    background:radial-gradient(circle at top,#333,#000);
     box-shadow:0 30px 60px #000,inset 0 0 30px #fff2;
-    transition:transform .15s ease-out;
+    transition:.15s;
 }
 
-/* SHARP RGB RING */
+/* NEON RGB RING (SHARP FIX) */
 .ring{
     position:absolute;
-    inset:-14px;
+    inset:-14px; /* slightly thicker for premium look */
     border-radius:50%;
     background:conic-gradient(
         red,magenta,blue,cyan,lime,yellow,red
     );
     animation:spin 6s linear infinite;
+    filter:none;                 /* 🔥 removed blur */
+    transform:translateZ(0);     /* 🔥 force GPU rendering */
+    will-change:transform;
 }
 .ring::after{
     content:"";
     position:absolute;
-    inset:14px;
+    inset:14px;                  /* match thickness */
     background:#000;
     border-radius:50%;
 }
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* MODERN CENTER BUTTON */
+/* CENTER BUTTON */
 .center{
     position:absolute;
-    inset:40%;
+    inset:38%;
     border-radius:50%;
-    background:
-        radial-gradient(circle at 30% 30%,#444,#111);
-    backdrop-filter:blur(6px);
+    background:radial-gradient(circle at top,#777,#111);
     box-shadow:
-        0 0 25px #0ff6,
-        inset 0 0 12px #fff4;
+        inset 0 0 10px #fff5,
+        0 10px 20px #000;
     display:flex;
     justify-content:center;
     align-items:center;
+    font-size:32px;
+    color:#0ff;
     cursor:pointer;
-    z-index:3;
+    user-select:none;
 }
-.center::before{
-    content:"";
-    width:18px;
-    height:18px;
-    border-left:5px solid #0ff;
-    border-right:5px solid #0ff;
-}
-.center.play::before{
-    width:0;
-    height:0;
-    border:none;
-    border-left:18px solid #0ff;
-    border-top:10px solid transparent;
-    border-bottom:10px solid transparent;
-}
-.center:active{transform:scale(.92)}
+.center:active{transform:scale(.9)}
 
-/* CANVAS */
+/* BEAT PULSE */
+.pulse{animation:pulse .3s ease}
+@keyframes pulse{50%{transform:scale(1.08)}}
+
+/* CANVAS WAVE */
 canvas{
     position:absolute;
     inset:20px;
     border-radius:50%;
+    overflow:hidden;
 }
 
 /* INFO */
@@ -97,12 +90,13 @@ canvas{
     text-align:center;
     font-size:14px;
     opacity:.8;
+    padding:0 10px;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
 }
 
-/* PICK */
+/* PICK BUTTON */
 .pick{
     position:absolute;
     bottom:-135px;
@@ -113,8 +107,12 @@ canvas{
     border:1px solid #0ff;
     padding:8px 20px;
     border-radius:25px;
-    box-shadow:0 0 18px #0ff8;
+    font-size:14px;
+    box-shadow:0 0 15px #0ff7;
+    cursor:pointer;
 }
+.pick:active{transform:translateX(-50%) scale(.95)}
+
 input{display:none}
 </style>
 </head>
@@ -123,9 +121,13 @@ input{display:none}
 
 <div class="player" id="player">
     <div class="ring"></div>
+
     <canvas id="wave" width="280" height="280"></canvas>
-    <div class="center play" id="btn"></div>
+
+    <div class="center" id="btn">▶</div>
+
     <div class="info" id="info">No track loaded</div>
+
     <button class="pick" id="pick">Select MP3</button>
     <input type="file" id="file" accept="audio/*">
 </div>
@@ -141,10 +143,11 @@ const ctx2d = canvas.getContext("2d");
 const player = document.getElementById("player");
 
 let ctx, analyser, source;
-let bassSmooth = 0;
 
-/* FILE PICK */
-pick.onclick = ()=>file.click();
+/* OPEN FILE PICKER */
+pick.onclick = () => file.click();
+
+/* LOAD AUDIO */
 file.onchange = e=>{
     const f = e.target.files[0];
     if(!f) return;
@@ -152,7 +155,7 @@ file.onchange = e=>{
     info.textContent = f.name;
 };
 
-/* PLAY */
+/* PLAY / PAUSE */
 btn.onclick = ()=>{
     if(!audio.src) return;
 
@@ -160,7 +163,6 @@ btn.onclick = ()=>{
         ctx = new (window.AudioContext||webkitAudioContext)();
         analyser = ctx.createAnalyser();
         analyser.fftSize = 2048;
-        analyser.smoothingTimeConstant = 0.6;
         source = ctx.createMediaElementSource(audio);
         source.connect(analyser);
         analyser.connect(ctx.destination);
@@ -170,36 +172,22 @@ btn.onclick = ()=>{
     if(audio.paused){
         audio.play();
         ctx.resume();
-        btn.classList.remove("play");
+        btn.textContent="❚❚";
     }else{
         audio.pause();
-        btn.classList.add("play");
+        btn.textContent="▶";
     }
 };
 
-/* PERFECT MUSIC SYNC */
+/* WAVEFORM + BEAT SYNC */
 function draw(){
     requestAnimationFrame(draw);
     if(!analyser) return;
 
-    const timeData = new Uint8Array(analyser.fftSize);
-    const freqData = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteTimeDomainData(timeData);
-    analyser.getByteFrequencyData(freqData);
+    const data = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(data);
 
-    /* REAL BASS (first 12 bins) */
-    let bass = 0;
-    for(let i=0;i<12;i++) bass += freqData[i];
-    bass /= 12;
-    bassSmooth += (bass - bassSmooth) * 0.15;
-
-    /* ZOOM ON BASS */
-    const zoom = 1 + bassSmooth / 900;
-    player.style.transform = `scale(${zoom})`;
-
-    /* GLOW TRAIL */
-    ctx2d.fillStyle = "rgba(0,0,0,0.2)";
-    ctx2d.fillRect(0,0,canvas.width,canvas.height);
+    ctx2d.clearRect(0,0,canvas.width,canvas.height);
 
     ctx2d.save();
     ctx2d.beginPath();
@@ -215,23 +203,24 @@ function draw(){
     ctx2d.beginPath();
     ctx2d.lineWidth = 2;
     ctx2d.strokeStyle = `hsl(${Date.now()/25%360},100%,60%)`;
-    ctx2d.shadowBlur = 20;
-    ctx2d.shadowColor = ctx2d.strokeStyle;
 
-    for(let i=0;i<timeData.length;i++){
-        const v = timeData[i] / 128;
-        const x = i / timeData.length * canvas.width;
-
-        /* WAVE AMPLIFIED BY BASS */
-        const y =
-            v * (canvas.height * (0.25 + bassSmooth/600)) +
-            canvas.height * 0.25;
+    let sum = 0;
+    for(let i=0;i<data.length;i++){
+        const v = data[i]/128;
+        const x = i/data.length * canvas.width;
+        const y = v*(canvas.height*0.35) + canvas.height*0.15;
 
         i===0 ? ctx2d.moveTo(x,y) : ctx2d.lineTo(x,y);
+        sum += Math.abs(v-1);
     }
 
     ctx2d.stroke();
     ctx2d.restore();
+
+    if(sum > 180){
+        player.classList.add("pulse");
+        setTimeout(()=>player.classList.remove("pulse"),80);
+    }
 }
 </script>
 
