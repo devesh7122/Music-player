@@ -32,16 +32,16 @@ body{
 /* NEON RGB RING (SHARP FIX) */
 .ring{
     position:absolute;
-    inset:-14px; /* slightly thicker for premium look */
+    inset:-14px;
     border-radius:50%;
     background:conic-gradient(
         red,magenta,blue,cyan,lime,yellow,red
     );
     animation:spin 6s linear infinite;
-    filter:none;                 /* 🔥 removed blur */
-    transform:translateZ(0);     /* 🔥 force GPU rendering */
-    will-change:transform;
+    filter:none;                 /* sharp */
+    will-change:transform;       /* GPU hint without breaking rotation */
 }
+
 .ring::after{
     content:"";
     position:absolute;
