@@ -24,11 +24,12 @@ body{
     width:320px;
     height:320px;
     border-radius:50%;
-    background:radial-gradient(circle at top,#333,#000);
+    background:radial-gradient(circle at top,#222,#000);
     box-shadow:0 30px 60px #000,inset 0 0 30px #fff2;
+    transition:transform .15s ease-out;
 }
 
-/* SHARP RGB RING (HD FIX) */
+/* SHARP RGB RING */
 .ring{
     position:absolute;
     inset:-14px;
@@ -45,30 +46,41 @@ body{
     background:#000;
     border-radius:50%;
 }
+@keyframes spin{to{transform:rotate(360deg)}}
 
-@keyframes spin{
-    to{transform:rotate(360deg)}
-}
-
-/* CENTER BUTTON */
+/* MODERN CENTER BUTTON */
 .center{
     position:absolute;
-    inset:38%;
+    inset:40%;
     border-radius:50%;
-    background:radial-gradient(circle at top,#777,#111);
+    background:
+        radial-gradient(circle at 30% 30%,#444,#111);
+    backdrop-filter:blur(6px);
     box-shadow:
-        inset 0 0 10px #fff5,
-        0 10px 20px #000;
+        0 0 25px #0ff6,
+        inset 0 0 12px #fff4;
     display:flex;
     justify-content:center;
     align-items:center;
-    font-size:32px;
-    color:#0ff;
     cursor:pointer;
-    user-select:none;
-    z-index:2;
+    z-index:3;
 }
-.center:active{transform:scale(.9)}
+.center::before{
+    content:"";
+    width:18px;
+    height:18px;
+    border-left:5px solid #0ff;
+    border-right:5px solid #0ff;
+}
+.center.play::before{
+    width:0;
+    height:0;
+    border:none;
+    border-left:18px solid #0ff;
+    border-top:10px solid transparent;
+    border-bottom:10px solid transparent;
+}
+.center:active{transform:scale(.92)}
 
 /* CANVAS */
 canvas{
@@ -85,13 +97,12 @@ canvas{
     text-align:center;
     font-size:14px;
     opacity:.8;
-    padding:0 10px;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:ellipsis;
 }
 
-/* PICK BUTTON */
+/* PICK */
 .pick{
     position:absolute;
     bottom:-135px;
@@ -102,14 +113,8 @@ canvas{
     border:1px solid #0ff;
     padding:8px 20px;
     border-radius:25px;
-    font-size:14px;
-    box-shadow:0 0 15px #0ff7;
-    cursor:pointer;
+    box-shadow:0 0 18px #0ff8;
 }
-.pick:active{
-    transform:translateX(-50%) scale(.95);
-}
-
 input{display:none}
 </style>
 </head>
@@ -118,13 +123,9 @@ input{display:none}
 
 <div class="player" id="player">
     <div class="ring"></div>
-
     <canvas id="wave" width="280" height="280"></canvas>
-
-    <div class="center" id="btn">▶</div>
-
+    <div class="center play" id="btn"></div>
     <div class="info" id="info">No track loaded</div>
-
     <button class="pick" id="pick">Select MP3</button>
     <input type="file" id="file" accept="audio/*">
 </div>
@@ -137,10 +138,12 @@ const btn = document.getElementById("btn");
 const info = document.getElementById("info");
 const canvas = document.getElementById("wave");
 const ctx2d = canvas.getContext("2d");
+const player = document.getElementById("player");
 
 let ctx, analyser, source;
+let bassSmooth = 0;
 
-/* PICK FILE */
+/* FILE PICK */
 pick.onclick = ()=>file.click();
 file.onchange = e=>{
     const f = e.target.files[0];
@@ -149,7 +152,7 @@ file.onchange = e=>{
     info.textContent = f.name;
 };
 
-/* PLAY / PAUSE */
+/* PLAY */
 btn.onclick = ()=>{
     if(!audio.src) return;
 
@@ -157,6 +160,7 @@ btn.onclick = ()=>{
         ctx = new (window.AudioContext||webkitAudioContext)();
         analyser = ctx.createAnalyser();
         analyser.fftSize = 2048;
+        analyser.smoothingTimeConstant = 0.6;
         source = ctx.createMediaElementSource(audio);
         source.connect(analyser);
         analyser.connect(ctx.destination);
@@ -166,26 +170,37 @@ btn.onclick = ()=>{
     if(audio.paused){
         audio.play();
         ctx.resume();
-        btn.textContent="❚❚";
+        btn.classList.remove("play");
     }else{
         audio.pause();
-        btn.textContent="▶";
+        btn.classList.add("play");
     }
 };
 
-/* OLD WAVEFORM + GLOW TRAILS */
+/* PERFECT MUSIC SYNC */
 function draw(){
     requestAnimationFrame(draw);
     if(!analyser) return;
 
-    const data = new Uint8Array(analyser.fftSize);
-    analyser.getByteTimeDomainData(data);
+    const timeData = new Uint8Array(analyser.fftSize);
+    const freqData = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteTimeDomainData(timeData);
+    analyser.getByteFrequencyData(freqData);
 
-    /* glow trail fade */
-    ctx2d.fillStyle = "rgba(0,0,0,0.18)";
+    /* REAL BASS (first 12 bins) */
+    let bass = 0;
+    for(let i=0;i<12;i++) bass += freqData[i];
+    bass /= 12;
+    bassSmooth += (bass - bassSmooth) * 0.15;
+
+    /* ZOOM ON BASS */
+    const zoom = 1 + bassSmooth / 900;
+    player.style.transform = `scale(${zoom})`;
+
+    /* GLOW TRAIL */
+    ctx2d.fillStyle = "rgba(0,0,0,0.2)";
     ctx2d.fillRect(0,0,canvas.width,canvas.height);
 
-    /* circular clip */
     ctx2d.save();
     ctx2d.beginPath();
     ctx2d.arc(
@@ -199,15 +214,20 @@ function draw(){
 
     ctx2d.beginPath();
     ctx2d.lineWidth = 2;
-    ctx2d.strokeStyle = `hsl(${Date.now()/30 % 360},100%,60%)`;
-    ctx2d.shadowBlur = 15;
+    ctx2d.strokeStyle = `hsl(${Date.now()/25%360},100%,60%)`;
+    ctx2d.shadowBlur = 20;
     ctx2d.shadowColor = ctx2d.strokeStyle;
 
-    for(let i=0;i<data.length;i++){
-        const v = data[i] / 128;
-        const x = i / data.length * canvas.width;
-        const y = v * (canvas.height * 0.35) + canvas.height * 0.15;
-        i === 0 ? ctx2d.moveTo(x,y) : ctx2d.lineTo(x,y);
+    for(let i=0;i<timeData.length;i++){
+        const v = timeData[i] / 128;
+        const x = i / timeData.length * canvas.width;
+
+        /* WAVE AMPLIFIED BY BASS */
+        const y =
+            v * (canvas.height * (0.25 + bassSmooth/600)) +
+            canvas.height * 0.25;
+
+        i===0 ? ctx2d.moveTo(x,y) : ctx2d.lineTo(x,y);
     }
 
     ctx2d.stroke();
