@@ -21,14 +21,23 @@ body{
 }
 
 html, body{
+    margin:0;
+    height:100%;
+    overflow:hidden;
     overscroll-behavior: none;
-    touch-action: none;
 }
 
+
 .player{
-    touch-action: none;
     position: fixed;
+    touch-action: none; /* only player blocks gestures */
 }
+
+button, input, .center{
+    touch-action: manipulation;
+    pointer-events: auto;
+}
+    
 
     
 
@@ -310,22 +319,18 @@ window.addEventListener("mouseup", ()=>{
 
 /* MOBILE */
 player.addEventListener("touchstart", e=>{
-    e.preventDefault();
     scrubbing = true;
     scrub(e);
-},{passive:false});
+},{passive:true});
 
 window.addEventListener("touchmove", e=>{
-    if(scrubbing){
-        e.preventDefault();
-        scrub(e);
-    }
-},{passive:false});
+    if(scrubbing) scrub(e);
+},{passive:true});
 
 window.addEventListener("touchend", ()=>{
     scrubbing = false;
 });
-;
+
    
 
 
