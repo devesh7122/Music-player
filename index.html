@@ -49,6 +49,21 @@ body{
     background:#000;
     border-radius:50%;
 }
+
+/* PROGRESS RING */
+.progress{
+    position:absolute;
+    inset:-20px;
+    border-radius:50%;
+    background:
+      conic-gradient(
+        #0ff var(--progress,0deg),
+        transparent 0
+      );
+    pointer-events:none;
+}
+
+    
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* CENTER BUTTON */
@@ -171,6 +186,8 @@ input{display:none}
 <body>
 
 <div class="player" id="player">
+    <div class="progress" id="progress"></div>
+
     <div class="ring"></div>
 
     <canvas id="wave" width="280" height="280"></canvas>
@@ -196,8 +213,33 @@ const canvas = document.getElementById("wave");
 const ctx2d = canvas.getContext("2d");
 const player = document.getElementById("player");
 const icon = document.getElementById("icon");    
+const progressRing = document.getElementById("progress");
+    
 
 let ctx, analyser, source;
+
+
+/* ===== SCRUBBING STATE ===== */
+let scrubbing = false;
+
+function scrub(e){
+    if(!audio.duration) return;
+
+    const rect = player.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - cx;
+    const y = (e.touches ? e.touches[0].clientY : e.clientY) - cy;
+
+    let angle = Math.atan2(y, x) + Math.PI / 2;
+    if(angle < 0) angle += Math.PI * 2;
+
+    const percent = angle / (Math.PI * 2);
+    audio.currentTime = percent * audio.duration;
+}
+
+    
 
 /* OPEN FILE PICKER */
 pick.onclick = () => file.click();
@@ -236,6 +278,38 @@ btn.onclick = ()=>{
     }
 };
 
+
+ /* ===== SCRUB EVENTS ===== */
+player.addEventListener("mousedown", e=>{
+    scrubbing = true;
+    scrub(e);
+});
+
+window.addEventListener("mousemove", e=>{
+    if(scrubbing) scrub(e);
+});
+
+window.addEventListener("mouseup", ()=>{
+    scrubbing = false;
+});
+
+/* MOBILE */
+player.addEventListener("touchstart", e=>{
+    scrubbing = true;
+    scrub(e);
+});
+
+window.addEventListener("touchmove", e=>{
+    if(scrubbing) scrub(e);
+});
+
+window.addEventListener("touchend", ()=>{
+    scrubbing = false;
+});
+   
+
+
+    
 /* WAVEFORM + BEAT SYNC */
 function draw(){
     requestAnimationFrame(draw);
@@ -260,6 +334,19 @@ function draw(){
     ctx2d.beginPath();
     ctx2d.lineWidth = 2;
     ctx2d.strokeStyle = `hsl(${Date.now()/25%360},100%,60%)`;
+
+
+    if(audio.duration){
+    const percent = audio.currentTime / audio.duration;
+    progressRing.style.setProperty(
+        "--progress",
+        `${percent * 360}deg`
+    );
+}
+
+
+
+    
 
     let sum = 0;
     for(let i=0;i<data.length;i++){
