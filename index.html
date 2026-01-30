@@ -253,8 +253,19 @@ function scrub(e){
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
 
-    const x = (e.touches ? e.touches[0].clientX : e.clientX) - cx;
-    const y = (e.touches ? e.touches[0].clientY : e.clientY) - cy;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    const x = clientX - cx;
+    const y = clientY - cy;
+
+    const distance = Math.hypot(x, y);
+    const radius = rect.width / 2;
+
+    /* ⛔ Ignore center & buttons */
+    if(distance < radius * 0.65 || distance > radius * 1.05){
+        return;
+    }
 
     let angle = Math.atan2(y, x) + Math.PI / 2;
     if(angle < 0) angle += Math.PI * 2;
@@ -262,6 +273,7 @@ function scrub(e){
     const percent = angle / (Math.PI * 2);
     audio.currentTime = percent * audio.duration;
 }
+
 
     
 
@@ -322,6 +334,12 @@ player.addEventListener("touchstart", e=>{
     scrubbing = true;
     scrub(e);
 },{passive:true});
+
+player.addEventListener("mousedown", e=>{
+    scrubbing = true;
+    scrub(e);
+});
+
 
 window.addEventListener("touchmove", e=>{
     if(scrubbing) scrub(e);
