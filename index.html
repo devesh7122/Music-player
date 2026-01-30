@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <title>Neon Beat Music Player</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" 
+content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
 
 <style>
 body{
@@ -18,6 +20,19 @@ body{
     overflow:hidden;
 }
 
+html, body{
+    overscroll-behavior: none;
+    touch-action: none;
+}
+
+.player{
+    touch-action: none;
+    position: fixed;
+}
+
+    
+
+    
 /* PLAYER */
 .player{
     position:relative;
@@ -295,17 +310,22 @@ window.addEventListener("mouseup", ()=>{
 
 /* MOBILE */
 player.addEventListener("touchstart", e=>{
+    e.preventDefault();
     scrubbing = true;
     scrub(e);
-});
+},{passive:false});
 
 window.addEventListener("touchmove", e=>{
-    if(scrubbing) scrub(e);
-});
+    if(scrubbing){
+        e.preventDefault();
+        scrub(e);
+    }
+},{passive:false});
 
 window.addEventListener("touchend", ()=>{
     scrubbing = false;
 });
+;
    
 
 
