@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#000000">
+    
 <meta charset="UTF-8">
 <title>Neon Beat Music Player</title>
 <meta name="viewport" 
@@ -409,6 +412,12 @@ function draw(){
         setTimeout(()=>player.classList.remove("pulse"),80);
     }
 }
+
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js");
+}
+
+    
 </script>
 
 </body>
